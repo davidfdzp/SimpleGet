@@ -34,7 +34,14 @@
 #include <string.h>
 #include <unistd.h>
 
+#include "quickselect.h"
+
 #define DEBUG
+
+// Maximum number of samples that can be collected
+#define MAX_SAMPLES 256
+
+elem_type quick_select(elem_type arr[], int n);
 
 int main(int argc, char *argv[]) {
 	CURL *curl;
@@ -43,9 +50,9 @@ int main(int argc, char *argv[]) {
 	char *ip;
 	char *ip_addr;
 	long response_code;
-	double namelookuptime_s, connect_time_s, start_transfer_time_s, total_time_s;
+	double namelookuptime_s[MAX_SAMPLES], connect_time_s[MAX_SAMPLES], start_transfer_time_s[MAX_SAMPLES], total_time_s[MAX_SAMPLES];
 	struct curl_slist *list = NULL;
-	int i, n=100; // Default amount of samples to collect
+	int i, n=100; // Default amount of samples to collect. Maximum is MAX_SAMPLES.
 
 	if((pf=fopen("index.html", "w"))==NULL){
 		perror("Opening index.html for writing");
@@ -74,8 +81,9 @@ int main(int argc, char *argv[]) {
 				}
 			}
 			if(list) curl_easy_setopt(curl, CURLOPT_HTTPHEADER, list);
-			if(n<=0 || n>1000){
-				fprintf(stderr,"Warning: trying to collect %d samples!", n);
+			if(n<=0 || n>MAX_SAMPLES){
+				fprintf(stderr,"Warning: trying to collect %d samples is not possible [1, %d]. Collecting 100 samples by default.", n, MAX_SAMPLES);
+				n = 100;
 			}
 		}
 	    // Redirect output of curl transfer to a FILE in disk
@@ -120,42 +128,48 @@ int main(int argc, char *argv[]) {
 				}
 				// Name lookup time in seconds
 				// https://curl.haxx.se/libcurl/c/CURLINFO_NAMELOOKUP_TIME.html
-				res = curl_easy_getinfo(curl, CURLINFO_NAMELOOKUP_TIME, &namelookuptime_s);
+				res = curl_easy_getinfo(curl, CURLINFO_NAMELOOKUP_TIME, &namelookuptime_s[i]);
 				if(CURLE_OK != res) {
-				  namelookuptime_s = -1;
+				  fprintf(stderr, "curl_easy_getinfo(CURLINFO_NAMELOOKUP_TIME) %d failed: %s\n", i,
+										  	curl_easy_strerror(res));
+				  namelookuptime_s[i] = -1;
 				}
 				// Connect time
 				// https://curl.haxx.se/libcurl/c/CURLINFO_CONNECT_TIME.html
-				res = curl_easy_getinfo(curl, CURLINFO_CONNECT_TIME, &connect_time_s);
+				res = curl_easy_getinfo(curl, CURLINFO_CONNECT_TIME, &connect_time_s[i]);
 				if(CURLE_OK != res) {
-					connect_time_s = -1;
+					fprintf(stderr, "curl_easy_getinfo(CURLINFO_CONNECT_TIME) %d failed: %s\n", i,
+											curl_easy_strerror(res));
+					connect_time_s[i] = -1;
 				}
 				// Start transfer time
 				// https://curl.haxx.se/libcurl/c/CURLINFO_STARTTRANSFER_TIME.html
-				res = curl_easy_getinfo(curl, CURLINFO_STARTTRANSFER_TIME, &start_transfer_time_s);
+				res = curl_easy_getinfo(curl, CURLINFO_STARTTRANSFER_TIME, &start_transfer_time_s[i]);
 				if(CURLE_OK != res) {
-				  start_transfer_time_s = -1;
+					fprintf(stderr, "curl_easy_getinfo(CURLINFO_STARTTRANSFER_TIME) %d failed: %s\n", i,
+											curl_easy_strerror(res));
+					start_transfer_time_s[i] = -1;
 				}
 				// Total transfer time
 				// https://curl.haxx.se/libcurl/c/CURLINFO_TOTAL_TIME.html
-				res = curl_easy_getinfo(curl, CURLINFO_TOTAL_TIME, &total_time_s);
+				res = curl_easy_getinfo(curl, CURLINFO_TOTAL_TIME, &total_time_s[i]);
 				if(CURLE_OK != res) {
-				  total_time_s = -1;
+					fprintf(stderr, "curl_easy_getinfo(CURLINFO_TOTAL_TIME) %d failed: %s\n", i,
+											curl_easy_strerror(res));
+					total_time_s[i] = -1;
 				}
-				// TODO: Update CDF stats
-
 				// Rewind FILE
 				rewind(pf);
 	    	}
 #ifdef DEBUG
-		    printf("SKTEST;%s;%ld;%lf;%lf;%lf;%lf\n", ip_addr, response_code, namelookuptime_s, connect_time_s, start_transfer_time_s, total_time_s);
+		    fprintf(stderr, "%d SKTEST;%s;%ld;%lf;%lf;%lf;%lf\n",i, ip_addr, response_code, namelookuptime_s[i], connect_time_s[i], start_transfer_time_s[i], total_time_s[i]);
 #endif
 			// TODO: sleep random time (e.g. exponentially distributed with mean 1 s (Poisson process))
 			sleep(1);
 	    }
-	    // TODO: Compute median values (and/or other percentiles)
+
 	    /* Print the median information */
-	    printf("SKTEST;%s;%ld;%lf;%lf;%lf;%lf\n", ip_addr, response_code, namelookuptime_s, connect_time_s, start_transfer_time_s, total_time_s);
+	    printf("SKTEST;%s;%ld;%lf;%lf;%lf;%lf\n", ip_addr, response_code, quick_select(namelookuptime_s, n), quick_select(connect_time_s, n), quick_select(start_transfer_time_s, n), quick_select(total_time_s, n));
 
 	    /* always cleanup */
 	    if(ip_addr) free(ip_addr);
