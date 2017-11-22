@@ -54,14 +54,15 @@ int main(int argc, char *argv[]) {
 	struct curl_slist *list = NULL;
 	int i, n=100; // Default amount of samples to collect. Maximum is MAX_SAMPLES.
 
-	if((pf=fopen("index.html", "w"))==NULL){
-		perror("Opening index.html for writing");
-	}
 	// https://curl.haxx.se/libcurl/c/curl_easy_init.html
 	curl = curl_easy_init();
 	if(curl) {
+		if((pf=fopen("index.html", "w"))==NULL){
+			perror("Opening index.html for writing");
+		}
 		// https://curl.haxx.se/libcurl/c/curl_easy_setopt.html
-		curl_easy_setopt(curl, CURLOPT_URL, "http://example.com");
+		// curl_easy_setopt(curl, CURLOPT_URL, "http://example.com");
+		curl_easy_setopt(curl, CURLOPT_URL, "http://www.google.com");
 		/* example.com is redirected, so we tell libcurl to follow redirection */
 	    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
 	    /* Check command-line arguments */
@@ -115,7 +116,7 @@ int main(int argc, char *argv[]) {
 					res = curl_easy_getinfo(curl, CURLINFO_PRIMARY_IP, &ip);
 					/* Check for errors */
 					if(CURLE_OK != res) {
-					  fprintf(stderr, "curl_easy_getinfo() failed: %s\n",
+					  fprintf(stderr, "curl_easy_getinfo(CURLINFO_PRIMARY_IP) failed: %s\n",
 							  curl_easy_strerror(res));
 					}else if(ip){
 						ip_addr = strdup(ip);
@@ -124,7 +125,11 @@ int main(int argc, char *argv[]) {
 					}
 					// HTTP response code
 					// https://curl.haxx.se/libcurl/c/CURLINFO_RESPONSE_CODE.html
-					curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &response_code);
+					res = curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &response_code);
+					if(CURLE_OK != res) {
+					   fprintf(stderr, "curl_easy_getinfo(CURLINFO_RESPONSE_CODE) %d failed: %s\n", i,
+												curl_easy_strerror(res));
+					}
 				}
 				// Name lookup time in seconds
 				// https://curl.haxx.se/libcurl/c/CURLINFO_NAMELOOKUP_TIME.html
@@ -159,7 +164,7 @@ int main(int argc, char *argv[]) {
 					total_time_s[i] = -1;
 				}
 				// Rewind FILE
-				rewind(pf);
+				if(pf) rewind(pf);
 	    	}
 #ifdef DEBUG
 		    fprintf(stderr, "%d SKTEST;%s;%ld;%lf;%lf;%lf;%lf\n",i, ip_addr, response_code, namelookuptime_s[i], connect_time_s[i], start_transfer_time_s[i], total_time_s[i]);
@@ -176,6 +181,8 @@ int main(int argc, char *argv[]) {
 	    if(list) curl_slist_free_all(list); /* free the list again */
 	    curl_easy_cleanup(curl);
 	    if(pf) fclose(pf);
-	}
-	return EXIT_SUCCESS;
+	    return EXIT_SUCCESS;
+	}else{
+	    return EXIT_FAILURE;
+    }
 }
